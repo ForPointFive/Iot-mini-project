@@ -63,18 +63,6 @@ export default function Home() {
     return { status: "Dry", color: "text-red-600" };
   };
 
-  if (loading) {
-    return (
-      <main className="flex min-h-screen flex-col items-center justify-center p-24">
-        <Spin
-          size="large"
-          indicator={<LoadingOutlined style={{ fontSize: 48 }} />}
-        />
-        <p className="mt-4 text-lg">Loading IoT sensor data...</p>
-      </main>
-    );
-  }
-
   if (error) {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center p-24">
