@@ -19,8 +19,8 @@ PIN_RELAY, PIN_BUTTON = 24, 23
 LED_COMMON_ANODE = False
 RELAY_ACTIVE_LOW = True
 
-SOIL_ON_TH, SOIL_OFF_TH = 5000, 2500
-WATER_MIN, WATER_MAX = 0, 4095
+SOIL_ON_TH, SOIL_OFF_TH = 3500, 2000  # (ยังไม่ใช้ OFF_TH ในโค้ดนี้)
+WATER_MIN, WATER_MAX = 0, 4095        # (ไม่ใช้กำหนดสีแล้ว)
 
 # ระยะเวลาติดรีเลย์แต่ละครั้ง (ms)
 RELAY_BURST_MS = 5000
@@ -45,6 +45,7 @@ led_g = PWMLED(PIN_G, frequency=1000)
 led_b = PWMLED(PIN_B, frequency=1000)
 
 def set_rgb01(r: float, g: float, b: float):
+    # รับค่า 0.0 - 1.0
     if LED_COMMON_ANODE:
         led_r.value, led_g.value, led_b.value = 1-r, 1-g, 1-b
     else:
@@ -59,6 +60,13 @@ last_relay_start_ts = 0
 last_reason = "boot"
 last_soil_value = None
 _off_timer: threading.Timer | None = None
+
+# ====== LED helper: เขียว=ทำงาน, แดง=ไม่ทำงาน ======
+def update_led_by_relay():
+    if pump_on:
+        set_rgb01(0, 1, 0)   # green
+    else:
+        set_rgb01(1, 0, 0)   # red
 
 def _cancel_off_timer():
     global _off_timer
@@ -83,25 +91,14 @@ def pump_set(state: bool, reason: str = "auto"):
         last_relay_start_ts = now_ms()
         last_reason = reason
         log(f"[PUMP] START  reason={reason} soil={last_soil_value} ts={last_relay_start_ts}")
+        update_led_by_relay()
         _schedule_off(RELAY_BURST_MS, reason_suffix=f"{reason}_timeout")
     elif (not state) and pump_on:
         relay.off(); pump_on = False
         last_reason = reason
         log(f"[PUMP] STOP   reason={reason} soil={last_soil_value} ts={now_ms()}")
+        update_led_by_relay()
         _cancel_off_timer()
-
-# ====== Water-level → RGB gradient ======
-def lerp(a,b,t): return a + (b-a)*t
-def level_to_rgb01(level: float):
-    if level <= WATER_MIN: return (1,0,0)
-    if level >= WATER_MAX: return (0,0,1)
-    mid = (WATER_MIN + WATER_MAX)/2
-    if level <= mid:
-        t = (level - WATER_MIN)/(mid - WATER_MIN + 1e-9)
-        return (lerp(1,0,t), lerp(0,1,t), 0)
-    else:
-        t = (level - mid)/(WATER_MAX - mid + 1e-9)
-        return (0, lerp(1,0,t), lerp(0,1,t))
 
 # ====== Button: press = force burst ======
 def on_button_pressed():
@@ -124,20 +121,14 @@ def on_message(client, userdata, msg):
         payload = {"value": raw}
 
     soil = payload.get("soil_moisture")
-    water = payload.get("water_level")
+    # water = payload.get("water_level")  # ไม่ใช้กำหนดสีอีกต่อไป
 
     try:
         last_soil_value = int(soil) if soil is not None else None
     except Exception:
         last_soil_value = None
 
-    if water is not None:
-        try:
-            r,g,b = level_to_rgb01(float(water))
-            set_rgb01(r,g,b)
-        except Exception:
-            pass
-
+    # กฎเปิดปั๊มจากค่า soil (ตัวอย่าง: เปิดเมื่อสูงกว่า SOIL_ON_TH)
     if soil is not None:
         try:
             s = int(soil)
@@ -145,6 +136,9 @@ def on_message(client, userdata, msg):
                 pump_set(True, reason="auto_soil_high")
         except Exception:
             pass
+
+    # อัปเดตไฟตามสถานะรีเลย์เสมอ
+    update_led_by_relay()
 
     payload["relay_state"] = "on" if pump_on else "off"
     payload["relay_reason"] = last_reason
@@ -165,6 +159,9 @@ signal.signal(signal.SIGINT, cleanup_and_exit)
 signal.signal(signal.SIGTERM, cleanup_and_exit)
 
 # ====== Run ======
+# เริ่มต้นให้ LED แสดงสถานะตรงกับ pump_on (เริ่มแดง)
+update_led_by_relay()
+
 client = mqtt.Client()
 client.on_connect = on_connect
 client.on_message = on_message
