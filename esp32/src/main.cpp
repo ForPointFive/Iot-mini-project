@@ -2,20 +2,27 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <DHT.h>
+
 // --- DHT Sensor ---
-#define DHTPIN 4 // GPIO pin where the DHT sensor is connected
-#define SOIL_PIN 6       // Soil moisture (Analog)
-#define WATER_PIN 7      // Water level (Analog)
-#define DHTTYPE DHT11 // DHT11 or DHT22
+#define DHTPIN 4
+#define SOIL_PIN 6
+#define WATER_PIN 7
+#define DHTTYPE DHT11
 DHT dht(DHTPIN, DHTTYPE);
 
 // --- WiFi credentials ---
-const char* ssid = "YOUR-SSID";
-const char* password = "YOUR-PASSWORD";
+const char* ssid = "Atonality";
+const char* password = "12345678";
 
-// --- MQTT Broker (Raspberry Pi running Mosquitto) ---
-const char* mqtt_server = "YOUR-MQTT-BROKER-IP";
+// --- MQTT Broker ---
+const char* mqtt_server = "10.12.218.32";
 const int mqtt_port = 1883;
+
+// --- Topics ---
+const char* tempTopic = "esp32/sensor/temperature";
+const char* humTopic = "esp32/sensor/humidity";
+const char* soilTopic = "esp32/sensor/soilMoisture";
+const char* waterTopic = "esp32/sensor/waterLevel";
 
 // --- Clients ---
 WiFiClient espClient;
@@ -41,7 +48,6 @@ void setup_wifi() {
 }
 
 void reconnect() {
-  // Loop until connected
   while (!client.connected()) {
     Serial.print("Attempting MQTT connection...");
     if (client.connect("ESP32Client")) {
@@ -59,8 +65,45 @@ void setup() {
   Serial.begin(115200);
   setup_wifi();
   client.setServer(mqtt_server, mqtt_port);
-
   dht.begin();
+}
+
+void publishSensors(float t, float h, int soilValue, int waterValue) {
+  // Temperature
+  if (!isnan(t)) {
+    String payload = String("{\"temperature\":") + t + "}";
+    if(client.publish(tempTopic, payload.c_str())) {
+      Serial.println("Temperature published: " + payload);
+    } else {
+      Serial.println("Temperature publish failed");
+    }
+  }
+
+  // Humidity
+  if (!isnan(h)) {
+    String payload = String("{\"humidity\":") + h + "}";
+    if(client.publish(humTopic, payload.c_str())) {
+      Serial.println("Humidity published: " + payload);
+    } else {
+      Serial.println("Humidity publish failed");
+    }
+  }
+
+  // Soil Moisture
+  String payloadSoil = String("{\"soilMoisture\":") + soilValue + "}";
+  if(client.publish(soilTopic, payloadSoil.c_str())) {
+    Serial.println("Soil Moisture published: " + payloadSoil);
+  } else {
+    Serial.println("Soil Moisture publish failed");
+  }
+
+  // Water Level
+  String payloadWater = String("{\"waterLevel\":") + waterValue + "}";
+  if(client.publish(waterTopic, payloadWater.c_str())) {
+    Serial.println("Water Level published: " + payloadWater);
+  } else {
+    Serial.println("Water Level publish failed");
+  }
 }
 
 void loop() {
@@ -69,24 +112,23 @@ void loop() {
   }
   client.loop();
 
-  // Publish DHT sensor data every 2 seconds
   static unsigned long lastMsg = 0;
-  if (millis() - lastMsg > 2000) {
+  if (millis() - lastMsg > 5000) {
     lastMsg = millis();
+
     float h = dht.readHumidity();
     float t = dht.readTemperature();
     int soilValue = analogRead(SOIL_PIN);
     int waterValue = analogRead(WATER_PIN);
 
-    if (isnan(h) || isnan(t)) {
-      Serial.println("Failed to read from DHT sensor!");
-      return;
+    if (isnan(h)) {
+      Serial.println("Failed to read Humidity!");
     }
-    String payload = String("{\"temperature\":") + t + ",\"humidity\":" + h + ",\"soil_moisture\":" + soilValue + ",\"water_level\":" + waterValue + "}";
-    client.publish("esp32/sensor", payload.c_str());
-    Serial.print("Published: ");
-    Serial.println(payload);
+    if (isnan(t)) {
+      Serial.println("Failed to read Temperature!");
+    }
+
+    // Publish all sensors (NaN values will be ignored inside publishSensors)
+    publishSensors(t, h, soilValue, waterValue);
   }
 }
-
-
