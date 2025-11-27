@@ -9,7 +9,7 @@ from camera_service import CameraService
 
 # ====== CONFIG ======
 SERVICE_ACCOUNT = "./serviceAccountKey.json"
-DATABASE_URL    = "https://final-iot-project-3f0ec-default-rtdb.asia-southeast1.firebasedatabase.app/"
+DATABASE_URL    = ""
 
 MQTT_HOST  = "0.0.0.0"
 MQTT_PORT  = 1883
