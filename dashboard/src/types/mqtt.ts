@@ -1,19 +1,22 @@
 export interface MqttMessage {
   mqtt: {
-    esp32: Esp32;
+    controller: Record<string, ControllerObject>;
+    humidity: Record<string, SensorObject>;
+    temperature: Record<string, SensorObject>;
+    soilmoisture: Record<string, SensorObject>;
+    waterlevel: Record<string, SensorObject>;
   };
 }
 
-export interface Esp32 {
-  sensor: Sensor;
+export interface ControllerObject {
+  image_base64: string;
+  last_relay_start_ts: number;
+  relay_reason: string;
+  relay_state: "on" | "off";
+  timestamp: number;
 }
 
-export interface Sensor {
-  humidity: number;
-  last_relay_start_ts: any;
-  relay_state: string;
-  relay_reason: string;
-  soil_moisture: number;
-  temperature: number;
-  water_level: number;
+export interface SensorObject {
+  timestamp: number;
+  value: number;
 }
